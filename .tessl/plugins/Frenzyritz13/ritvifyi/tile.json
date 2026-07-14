@@ -1,0 +1,17 @@
+{
+  "name": "Frenzyritz13/ritvifyi",
+  "version": "c56cea5707ae44b57a22d4613ff6496a3b69656b",
+  "summary": "Auto-generated plugin from GitHub (3 skills)",
+  "private": true,
+  "skills": {
+    "animejs": {
+      "path": ".claude/skills/animejs/SKILL.md"
+    }
+  },
+  "excludes": {
+    "skills": [
+      "autofix",
+      "code-review"
+    ]
+  }
+}

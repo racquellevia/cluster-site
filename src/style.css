@@ -1,0 +1,338 @@
+@font-face {
+  font-family: "ZT Nature";
+  src: url("/fonts/ZTNature-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ZT Nature";
+  src: url("/fonts/ZTNature-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ZT Nature";
+  src: url("/fonts/ZTNature-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+* {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+}
+
+body {
+  background: #fff;
+  color: #111;
+  font-family: "ZT Nature", system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+#cloud {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* mark blob on its own layer, above main (and the header wash inside it) */
+#mark-cloud {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+.panel {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  padding: clamp(1.5rem, 5vw, 5rem);
+  scroll-snap-align: start;
+  scroll-snap-stop: always; /* stop at every section even on a fast fling */
+}
+
+/* Alternate copy left/right so text doesn't always sit on the cloud */
+.panel:nth-of-type(even) {
+  justify-content: flex-end;
+}
+
+.copy {
+  max-width: 32rem;
+}
+
+/* soft white halo keeps copy legible where it overlaps the point cloud */
+.copy > * {
+  text-shadow:
+    0 0 6px #fff,
+    0 0 14px #fff,
+    0 0 24px #fff;
+}
+
+/* full-width wash behind the docked header; JS drives height + opacity
+   (fades in with the lockup shrink, see main.js) */
+.header-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.65);
+  z-index: 5; /* above section copy, below the lockup */
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* hero lockup (blob + CLUSTER + lede): JS shrinks it into a fixed header on
+   scroll (see main.js); inline-block so its box hugs the h1 width */
+.lockup {
+  display: inline-block;
+  position: relative;
+  z-index: 10;
+  transform-origin: top left;
+  will-change: transform;
+}
+
+h1 {
+  /* wordmark scale: deliberately above body-heading norms, it IS the hero */
+  font-size: clamp(3.5rem, 13vw, 9rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  text-transform: uppercase;
+  /* inline-flex: shrink-to-fit so JS can measure the lockup's true width */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1em;
+}
+
+/* empty box the point cloud pins itself to (see cloud.js);
+   nudged up so it centers on the caps, not the em box */
+.mark {
+  width: 0.72em;
+  height: 0.72em;
+  flex: none;
+  transform: translateY(-0.03em);
+}
+
+h2 {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 1rem;
+}
+
+h3 {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+p {
+  font-size: clamp(1rem, 1.4vw, 1.125rem);
+  color: #333;
+  max-width: 55ch;
+}
+
+.copy p + p {
+  margin-top: 1rem;
+}
+
+.copy ul {
+  list-style: none;
+  padding: 0;
+  font-size: clamp(1rem, 1.4vw, 1.125rem);
+  color: #333;
+  max-width: 55ch;
+}
+
+.copy li + li {
+  margin-top: 0.75rem;
+}
+
+.copy a {
+  color: #111;
+}
+
+.eyebrow {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #666;
+  margin-bottom: 0.75rem;
+}
+
+.lede {
+  font-size: clamp(1.125rem, 2vw, 1.375rem);
+  font-weight: 300;
+  margin-top: 1.25rem;
+}
+
+/* hero lede: bold lockup line, JS-fitted to the h1's width (see main.js);
+   inline-block so its measured width is the text, not the container */
+.hero .lede {
+  display: inline-block;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  white-space: nowrap;
+  color: #111;
+  margin-top: -0.2rem;
+  max-width: none;
+}
+
+.hero {
+  position: relative;
+  justify-content: center;
+  text-align: center;
+}
+
+.hero .copy {
+  max-width: 44rem;
+}
+
+.hero .copy p {
+  margin-inline: auto;
+}
+
+.scroll-hint {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: #999;
+  animation: hint-bob 2.4s ease-in-out infinite;
+}
+
+@keyframes hint-bob {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, 8px); }
+}
+
+/* pins a CTA into the empty half of a panel (opposite the copy column),
+   where that section's point-cloud shape renders — see cloud.js */
+#expect {
+  position: relative;
+}
+
+.side-cta {
+  position: absolute;
+  /* midpoint between the copy column's right edge and the viewport edge —
+     same gap-center math cloud.js uses to place the shape itself */
+  left: calc((clamp(1.5rem, 5vw, 5rem) + 32rem + 100%) / 2);
+  transform: translateX(-50%);
+  bottom: 20%;
+  margin-top: 0;
+}
+
+.register {
+  display: inline-block;
+  margin-top: 2rem;
+  padding: 0.85em 2.5em;
+  font-size: clamp(1rem, 1.4vw, 1.125rem);
+  font-weight: 600;
+  color: #111;
+  background: #fff;
+  border: 1px solid #111;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.register:hover,
+.register:focus-visible {
+  opacity: 0.6;
+}
+
+/* credit line pinned to the bottom of the last panel (a separate footer
+   below it would be unreachable under mandatory scroll-snap) */
+#details {
+  position: relative;
+}
+
+.site-credit {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.8125rem;
+  color: #999;
+  white-space: nowrap;
+}
+
+.site-credit a {
+  color: #999;
+}
+
+.contact-link {
+  display: inline-block;
+  margin-top: 1.5rem;
+  font-size: clamp(1.125rem, 2vw, 1.375rem);
+  color: #111;
+  text-decoration: none;
+  border-bottom: 1px solid #111;
+  padding-bottom: 0.15em;
+  transition: opacity 0.2s ease;
+}
+
+.contact-link:hover,
+.contact-link:focus-visible {
+  opacity: 0.5;
+}
+
+@media (max-width: 768px) {
+  .panel,
+  .panel:nth-of-type(even) {
+    justify-content: flex-start;
+    align-items: flex-end;
+    padding-bottom: 18svh;
+  }
+
+  /* two-column layout collapses on mobile; keep the CTA absolute (its
+     sibling .copy is still a lone flex child here) but re-anchor it
+     bottom-center instead of into a "side" that no longer exists */
+  .side-cta {
+    right: auto;
+    left: 50%;
+    bottom: 4svh;
+    transform: translateX(-50%);
+  }
+
+  .hero {
+    align-items: center;
+    padding-bottom: clamp(1.5rem, 5vw, 5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+    scroll-snap-type: none;
+  }
+  .scroll-hint {
+    animation: none;
+  }
+}

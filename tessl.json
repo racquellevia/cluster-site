@@ -1,0 +1,15 @@
+{
+  "name": "cluster",
+  "mode": "vendored",
+  "dependencies": {
+    "Frenzyritz13/ritvifyi": {
+      "version": "c56cea5707ae44b57a22d4613ff6496a3b69656b",
+      "source": "https://github.com/Frenzyritz13/ritvifyi",
+      "include": {
+        "skills": [
+          "animejs"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cluster</title>
+    <meta name="description" content="Cluster — The Practitioners’ Summit at VIS. A half-day gathering for people who build, ship, and defend visualizations for a living." />
+    <link rel="preload" href="./fonts/ZTNature-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./fonts/ZTNature-SemiBold.woff2" as="font" type="font/woff2" crossorigin />
+  </head>
+  <body>
+    <canvas id="cloud" aria-hidden="true"></canvas>
+    <canvas id="mark-cloud" aria-hidden="true"></canvas>
+
+    <main>
+      <div class="header-bg" id="header-bg" aria-hidden="true"></div>
+      <!--
+        Each section's point-cloud shape:
+        - data-shape       = procedural fallback (scatter | sphere | torus | grid | spiral | wave | clusters | helix)
+        - data-shape-src   = optional image (jpg/png/svg) in public/shapes/ — dark pixels become points.
+          Drop your image in public/shapes/ and set the attribute, e.g. data-shape-src="shapes/hero.svg"
+      -->
+
+      <section class="panel hero" id="hero" data-shape="scatter">
+        <div class="copy">
+          <div class="lockup" id="lockup">
+            <h1><span class="mark" id="cloud-anchor" aria-hidden="true"></span>Cluster</h1>
+            <p class="lede">The Practitioners’ Summit at VIS</p>
+          </div>
+          <p>A half-day gathering for people who build, ship, and defend visualizations for a living. IEEE VIS has always been where the research happens. This fall, it's also where practice gets a seat at the table.</p>
+        </div>
+        <p class="scroll-hint" aria-hidden="true">Scroll</p>
+      </section>
+
+      <section class="panel" id="why" data-shape="sphere" data-shape-src="shapes/star.png">
+        <div class="copy">
+          <h2>Why Cluster Exists</h2>
+          <p>Data visualization research should not occur in a vacuum. Somewhere, someone had to explain a chart to a skeptical stakeholder, fix a dashboard at 11pm before a board meeting, or figure out how to make a D3 chart accessible with a deadline in six hours. Data visualization practice is at the heart of our field. It needs a place in our conference.</p>
+          <p>Cluster invests in questions that stem from doing. Practice is not a theory-based application layer, it’s where half the field’s best questions come from. The theme of this year’s Practitioner’s Summit is based on a simple bet: if you get the right people in the room – practitioners with their real problems, academics with their research questions – and give them space to talk, the connections, ideas and solutions write themselves. This Summit isn’t here to create a list of solved problems or research that’s already completed. We want to build a community where all sides of the field can come together and solve those problems and answer those questions together.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="expect" data-shape="torus" data-shape-src="shapes/chevrons.png" data-shape-scale="1.3">
+        <div class="copy">
+          <h2>What to Expect</h2>
+
+          <h3>Lightning Talks</h3>
+          <p>We want to hear your challenges, your unsolved problems, your business frustrations. We want to know what barrier you hit, the thing that almost worked, or the thing that really took off. We’re ideally looking for lightning talks that spur follow-up conversation as this program will end directly before a catered lunch, with ample time to discuss more. Thus, we’re prioritizing talks that name concrete challenges, frustrations, and wishes for the future, as these tend to spark more conversation, more connections, and more follow-up than a polished success story ever does. If you've got a mess instead of a case study, that's exactly what we're looking for.</p>
+          <p>An option is available for speakers interested in explicitly talking about or demo’ing their recent product, prototype, or business approach through a sponsorship channel. A donation as a sponsor will enable up to, but no more than, three of our lightning talk slots to be reserved. Fill out the form to submit a talk, and please reach out to our Supporters Chairs (<a href="mailto:supporters@ieeevis.org">supporters@ieeevis.org</a>) if this interests you.</p>
+        </div>
+        <a class="register side-cta" href="https://docs.google.com/forms/d/e/1FAIpQLSfSrCO17K_nqLKonilL3zvPUI403C1DHd_QMiFMAxxdzBuXjw/viewform?usp=publish-editor" target="_blank" rel="noopener">Submit a Lightning Talk</a>
+      </section>
+
+      <section class="panel" id="policyviz" data-shape="helix" data-shape-src="shapes/pinwheel.png">
+        <div class="copy">
+          <h3>PolicyViz Podcast: Live</h3>
+          <p>Welcome to a live episode of the PolicyViz Podcast! Recorded live, with practitioners in the room and experts on the stage, will explore what it’s like to work in this field right now—the job market, freelancing, AI, and the stuff nobody puts in a conference abstract. Come for the conversation, stay for the audience Q&amp;A.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="freelance" data-shape="flower">
+        <div class="copy">
+          <h3>Freelancing FAQ session</h3>
+          <p>Getting into vis practice as a freelancer, in-house specialist, or design agency in the private sector, isn’t well documented. How do you incorporate? How do you pay taxes? Where do you get health insurance? What tools are worth purchasing and which are worth skipping? This interactive session—built from input by the community—is dedicated to demystifying these questions. We will explore how people built their own businesses and what their paths looked like, and host an open floor for the questions you don't usually get to ask a room full of people who've done it.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="explore" data-shape="cone">
+        <div class="copy">
+          <h3>In-Person Data Exploration</h3>
+          <p>Throughout the day, we'll have data visualizations on display for attendees to explore and interact with. We will also have live feedback stations where you can react to work in progress, leave a note, or vote with a sticker. It’s a lower-stakes way to engage than a formal Q&amp;A. Wander over between sessions and add your two cents to someone else's board, or come with a project you want reactions on.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="who" data-shape="torus">
+        <div class="copy">
+          <h2>Who Cluster is For</h2>
+          <p>Anyone doing visualization work outside a pure research role. We welcome freelancers, contractors, instructors, in-house data viz teams, journalists, consultants, product designers, analysts, and students. Plus, we hook directly into the IEEE VIS conference to connect with researchers who want their work grounded in what practitioners actually run into. If you've ever had to defend a chart to someone who didn't ask for one, this is your room.</p>
+        </div>
+      </section>
+
+      <section class="panel" id="details" data-shape="spiral">
+        <div class="copy">
+          <h2>Details</h2>
+          <ul>
+            <li><strong>Date:</strong> November 11, 2026</li>
+            <li><strong>Format:</strong> Half-day, in person, at the IEEE VIS conference this fall</li>
+            <li><strong>Lunch:</strong> Catered</li>
+            <li><strong>Start time:</strong> <!-- TODO: fill in -->[fill in]</li>
+            <li><strong>Cost / registration:</strong> <!-- TODO: fill in -->[fill in]</li>
+          </ul>
+          <a class="register" href="#"><!-- TODO: registration link -->Register</a>
+        </div>
+        <p class="site-credit">Made by <a href="https://www.eyelightlabs.com" target="_blank" rel="noopener">Eyelight Labs</a></p>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
