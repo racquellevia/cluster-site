@@ -13,15 +13,26 @@ const sections = [...document.querySelectorAll(".panel[data-shape]")];
 // The logo mark blob is sampled from its own image (scatter as fallback).
 const [initial, markPts] = await Promise.all([
   shapePoints({ fallback: sections[0].dataset.shape }, N),
-  shapePoints({ src: "shapes/logo-blob.png", fallback: "scatter" }, coarse ? 3000 : 4500),
+  shapePoints({ src: "shapes/logo-blob.png", fallback: "scatter" }, coarse ? 3500 : 5200),
 ]);
 const cloud = startCloud(document.querySelector("#cloud"), sections, N, initial, markPts);
 
+const expectIndex = sections.findIndex((el) => el.id === "expect");
+// keeps --expect-shape-bottom (the chevrons.png shape's rendered bottom edge)
+// live for the "Submit a Lightning Talk" button, see .side-cta in style.css
+function updateCtaOffset() {
+  document.documentElement.style.setProperty(
+    "--expect-shape-bottom",
+    `${cloud.shapeBottomPx(expectIndex)}px`,
+  );
+}
+
 sections.forEach((el, i) => {
   if (i === 0) return; // hero: cloud.js pins the mark blob and parks the morph cloud offscreen
-  shapePoints({ src: el.dataset.shapeSrc, fallback: el.dataset.shape }, N).then(
-    (pts) => cloud.setTarget(i, pts),
-  );
+  shapePoints({ src: el.dataset.shapeSrc, fallback: el.dataset.shape }, N).then((pts) => {
+    cloud.setTarget(i, pts);
+    if (i === expectIndex) updateCtaOffset();
+  });
 });
 
 initTextAnimations();
@@ -56,14 +67,19 @@ function placeLockup() {
   const k = 1 + e * (kEnd - 1);
   const y0 = flow.top - scrollY; // where the lockup would sit if left in flow
   lockup.style.transform = `translate(${(PAD - flow.left) * e}px, ${(PAD - y0) * e}px) scale(${k})`;
-  headerBg.style.height = `${flow.height * kEnd + PAD * 1.4}px`; // PAD above, ~0.4·PAD below
+  const headerH = flow.height * kEnd + PAD * 1.4; // PAD above, ~0.4·PAD below
+  headerBg.style.height = `${headerH}px`;
   headerBg.style.opacity = e;
+  // .lockup is transform-positioned, not position:fixed, so it reserves no
+  // layout space itself — sections read this to clear the docked header
+  document.documentElement.style.setProperty("--header-h", `${headerH}px`);
 }
 addEventListener("scroll", placeLockup, { passive: true });
 
 function layoutHero() {
   fitLede();
   measureLockup();
+  updateCtaOffset(); // cloud.js's own resize handler (registered first) has already re-run
 }
 layoutHero();
 addEventListener("resize", layoutHero);

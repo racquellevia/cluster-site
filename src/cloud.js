@@ -100,10 +100,30 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
   let scale = 1;
   let visW = 1;
   let visH = 1;
+  let wide = true;
   let anchors = [];
   // world-space x per section: cloud centered in the negative space between
   // the copy column and the far browser edge (0 on narrow screens / hero)
   let sideX = sectionEls.map(() => 0);
+
+  // per-section size multiplier via data-shape-scale on the section
+  const shapeScale = sectionEls.map((el) => parseFloat(el.dataset.shapeScale) || 1);
+  // sections whose shape sits small above the copy on narrow screens
+  // (mobile copy is bottom-anchored, leaving white space under the header)
+  const mobileTop = sectionEls.map((el) => "shapeMobileTop" in el.dataset);
+  // extra mobile-top height via data-mobile-stretch-y, growing downward only
+  // (toward the copy) — the offset shifts down by the added height so the
+  // shape's top edge stays put instead of growing upward too
+  const mobileStretchY = sectionEls.map((el) => parseFloat(el.dataset.mobileStretchY) || 1);
+  const SHAPE_HALF_HEIGHT = 0.3; // approx local half-height shared by the procedural shapes
+  // extra per-section nudges: shift up by N px (data-shape-offset-y) and
+  // push back from the camera by N world units (data-shape-depth) — resize()
+  // needs this to keep sideX correct at depth, so it's declared before it
+  const shapeOffsetYPx = sectionEls.map((el) => parseFloat(el.dataset.shapeOffsetY) || 0);
+  const shapeDepth = sectionEls.map((el) => parseFloat(el.dataset.shapeDepth) || 0);
+  // per-section dot-radius multiplier (data-dot-scale), independent of
+  // shapeScale — lets a shape's footprint and its dot size be tuned apart
+  const dotScale = sectionEls.map((el) => parseFloat(el.dataset.dotScale) || 1);
 
   // hero shape for the morph cloud: dots scattered in a ring beyond the
   // viewport edge, so section 1's shape assembles by flying in from outside
@@ -133,13 +153,18 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     visW = visH * camera.aspect;
     scale = 0.62 * Math.min(visW, visH);
     anchors = sectionEls.map((el) => el.offsetTop);
-    const wide = camera.aspect > 1.05;
+    wide = camera.aspect > 1.05;
     sideX = sectionEls.map((el, i) => {
       if (i === 0 || !wide) return 0;
       const r = el.querySelector(".copy").getBoundingClientRect();
       const onRight = r.left + r.width / 2 > w / 2;
       const cx = onRight ? r.left / 2 : (r.right + w) / 2; // gap midpoint, px
-      return (cx / w - 0.5) * visW;
+      // a shape pushed back via data-shape-depth is farther from the camera,
+      // so perspective pulls its screen position toward center more than a
+      // z=0 shape's — scale the world x up to compensate, so it still lands
+      // on the same gap-center px as z=0 math (and the .side-cta CSS) would
+      const depthFactor = (CAM_DIST - shapeDepth[i]) / CAM_DIST;
+      return (cx / w - 0.5) * visW * depthFactor;
     });
     targets[0] = offscreenRing();
   }
@@ -147,13 +172,34 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
   addEventListener("resize", resize);
   document.fonts.ready.then(resize); // section offsets shift when ZT Nature loads
 
-  // per-section size multiplier via data-shape-scale on the section
-  const shapeScale = sectionEls.map((el) => parseFloat(el.dataset.shapeScale) || 1);
-
-  // world-space [x, y, scale, dotSize] of the morph cloud for section k
+  // world-space [x, y, xScale, yScale, dotSize, z] of the morph cloud for section k
   function transform(k) {
+    const upOffset = (shapeOffsetYPx[k] / innerHeight) * visH;
+    if (!wide && mobileTop[k]) {
+      const s = Math.min(visW * 0.9, visH * 0.3) * shapeScale[k];
+      const stretchY = mobileStretchY[k];
+      const sy = s * stretchY;
+      const oy = visH * 0.25 - SHAPE_HALF_HEIGHT * s * (stretchY - 1) + upOffset;
+      return [0, oy, s, sy, s * (coarse ? 0.016 : 0.011) * dotScale[k], shapeDepth[k]];
+    }
     const s = scale * shapeScale[k];
-    return [sideX[k], 0, s, s * (coarse ? 0.016 : 0.011)];
+    return [sideX[k], upOffset, s, s, s * (coarse ? 0.016 : 0.011) * dotScale[k], shapeDepth[k]];
+  }
+
+  // viewport px (from the top) of a section's resting shape's lowest point —
+  // lets CSS pin UI (e.g. the #expect CTA) just below it, see style.css
+  function shapeBottomPx(k) {
+    const pts = targets[k];
+    const [, oy, , sy, , oz] = transform(k);
+    // a shape pushed back via data-shape-depth is farther from the camera,
+    // so its visible extent (and thus its y → screen-px mapping) shrinks
+    const visHAtZ = visH * ((CAM_DIST - oz) / CAM_DIST);
+    let minY = Infinity;
+    for (let p = 0; p < pts.length / 3; p++) {
+      const y = pts[p * 3 + 1] * sy + oy;
+      if (y < minY) minY = y;
+    }
+    return innerHeight * (0.5 - minY / visHAtZ);
   }
 
   // scroll position → fractional shape index
@@ -186,21 +232,23 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     const t = smoothstep(Math.min(1, Math.max(0, smooth - i)));
     const u = 1 - t;
 
-    const [xA, yA, sA, dA] = transform(i);
-    const [xB, yB, sB, dB] = transform(j);
+    const [xA, yA, sxA, syA, dA, zA] = transform(i);
+    const [xB, yB, sxB, syB, dB, zB] = transform(j);
     const ox = xA * u + xB * t;
     const oy = yA * u + yB * t;
-    const sNow = sA * u + sB * t;
+    const oz = zA * u + zB * t;
+    const sxNow = sxA * u + sxB * t;
+    const syNow = syA * u + syB * t;
 
     material.size = dA * u + dB * t;
 
-    const amp = reduceMotion ? 0 : sNow * 0.008;
+    const amp = reduceMotion ? 0 : sxNow * 0.008;
     for (let p = 0; p < N; p++) {
       const o = p * 3;
       const ph = phase[p];
-      drawn[o] = a[o] * sA * u + b[o] * sB * t + ox + Math.sin(time * 0.6 + ph) * amp;
-      drawn[o + 1] = a[o + 1] * sA * u + b[o + 1] * sB * t + oy + Math.cos(time * 0.5 + ph * 1.7) * amp;
-      drawn[o + 2] = a[o + 2] * sA * u + b[o + 2] * sB * t + Math.sin(time * 0.4 + ph * 2.3) * amp;
+      drawn[o] = a[o] * sxA * u + b[o] * sxB * t + ox + Math.sin(time * 0.6 + ph) * amp;
+      drawn[o + 1] = a[o + 1] * syA * u + b[o + 1] * syB * t + oy + Math.cos(time * 0.5 + ph * 1.7) * amp;
+      drawn[o + 2] = a[o + 2] * sxA * u + b[o + 2] * sxB * t + oz + Math.sin(time * 0.4 + ph * 2.3) * amp;
     }
     geometry.attributes.position.needsUpdate = true;
 
@@ -208,15 +256,37 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     // dots are proportionally bigger + fully opaque so the mark reads solid
     if (markEl) {
       const r = markEl.getBoundingClientRect();
-      // hero-only tweaks: at full size the blob is a bit bigger, denser
-      // (fatter dots), and sits slightly lower; fades out as the lockup
-      // docks into the header (same scroll curve as main.js placeLockup)
+      // hero-only tweaks: at full size the blob's footprint is a bit
+      // bigger and sits slightly lower (dot size still scales with it,
+      // so density matches the docked header state); fades out as the
+      // lockup docks into the header (same curve as main.js placeLockup)
       const hero = 1 - smoothstep(Math.min(1, Math.max(0, scrollY / (anchors[1] * 0.55))));
       const mx = ((r.left + r.width / 2) / innerWidth - 0.5) * visW;
       // sampled logo-blob image spans ~0.95 unit-box units
       const ms = (((r.height / innerHeight) * visH) / 0.95) * (1 + hero * 0.12);
       const my = (0.5 - (r.top + r.height / 2) / innerHeight) * visH - hero * ms * 0.06;
-      markMaterial.size = ms * (coarse ? 0.035 : 0.027) * (1 + hero * 0.3);
+      // floor in world units so dots stay visible even when the anchor is
+      // small (mobile h1 clamps much smaller than desktop, e.g. 3.5rem vs
+      // 9rem) — otherwise dots rasterize under a couple px and alphaTest
+      // discards nearly all of them, making the whole mark disappear
+      const minDotPx = 3.0;
+      const minSize = (minDotPx * visH) / innerHeight;
+      // hero-only size boost, layered on top of the same "hero" blend used
+      // for ms/my above — the docked header (hero=0) is unaffected, so
+      // tuning this can't regress that state; it exists because the base
+      // multiplier is tuned for the docked size and is too small at hero
+      // scale to clear minSize on its own
+      markMaterial.size = Math.max(ms * (coarse ? 0.0248 : 0.0195) * (1 + hero * 1.0), minSize);
+      // M is fixed, but the docked header anchor is much smaller in area
+      // than the hero one — same dot count packed into far less area would
+      // overlap into a solid disc despite the size floor above. Scale how
+      // many points are DRAWN (not their positions) with anchor area, via
+      // offsetHeight (layout size, unaffected by the lockup's CSS scale
+      // transform) as the stable "full size" reference, so dot density
+      // reads the same at any dock progress.
+      const naturalH = markEl.offsetHeight;
+      const areaRatio = naturalH > 0 ? Math.min(1, (r.height / naturalH) ** 2) : 1;
+      markGeometry.setDrawRange(0, Math.max(580, Math.round(M * areaRatio)));
       const mAmp = reduceMotion ? 0 : ms * 0.008;
       for (let p = 0; p < M; p++) {
         const o = p * 3;
@@ -244,5 +314,6 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     setTarget(index, pts) {
       targets[index] = pts;
     },
+    shapeBottomPx,
   };
 }

@@ -78,7 +78,17 @@ main {
   max-width: 32rem;
 }
 
-/* soft white halo keeps copy legible where it overlaps the point cloud */
+/* translucent backing card behind copy, since a point-cloud shape can render
+   directly behind this text (see cloud.js); harmless no-op elsewhere since
+   it's white-on-white. Hero's copy sits beside its shape, not behind it. */
+.panel:not(.hero) .copy {
+  background: rgba(255, 255, 255, 0.65);
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+}
+
+/* soft white halo, layered with the card above for extra legibility right at
+   the card's edge / on any shape bleed beyond it */
 .copy > * {
   text-shadow:
     0 0 6px #fff,
@@ -238,13 +248,27 @@ p {
   position: relative;
 }
 
+#expect .copy {
+  transform: translateY(20px);
+}
+
 .side-cta {
   position: absolute;
   /* midpoint between the copy column's right edge and the viewport edge —
      same gap-center math cloud.js uses to place the shape itself */
   left: calc((clamp(1.5rem, 5vw, 5rem) + 32rem + 100%) / 2);
   transform: translateX(-50%);
-  bottom: 20%;
+  /* anchored from the panel's TOP (which aligns with the viewport top once
+     scroll-snapped), not its bottom — #expect's copy is taller than 100svh,
+     so a bottom-% anchor scales with that overflow and can push the button
+     off-screen. --expect-shape-bottom is the chevrons.png shape's rendered
+     bottom edge in viewport px, kept live by cloud.js/main.js. */
+  top: calc(var(--expect-shape-bottom, 62vh) + 30px);
+}
+
+/* .register's margin-top:2rem would otherwise win the cascade (equal
+   specificity, declared later) and throw off the offset above */
+.register.side-cta {
   margin-top: 0;
 }
 
@@ -259,12 +283,15 @@ p {
   border: 1px solid #111;
   border-radius: 999px;
   text-decoration: none;
-  transition: opacity 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .register:hover,
 .register:focus-visible {
-  opacity: 0.6;
+  background: #111;
+  color: #fff;
 }
 
 /* credit line pinned to the bottom of the last panel (a separate footer
@@ -324,6 +351,28 @@ p {
   .hero {
     align-items: center;
     padding-bottom: clamp(1.5rem, 5vw, 5rem);
+  }
+
+  /* sections with no small shape reserved above them (see cloud.js
+     mobileTop) carry enough copy that bottom-pinning can overflow up
+     under the docked header (transform-positioned, so it reserves no
+     layout space of its own — see main.js). Flow from the top instead,
+     clearing the header, and let the panel grow past 100svh if needed. */
+  .panel:not(.hero):not([data-shape-mobile-top]) {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-top: calc(var(--header-h, 88px) + 1.5rem);
+    padding-bottom: clamp(1.5rem, 5vw, 5rem);
+  }
+
+  /* content-driven height means an absolute bottom-% anchor can't reliably
+     clear the text anymore — flow it in normally, right after the copy */
+  .panel:not(.hero):not([data-shape-mobile-top]) .side-cta {
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    margin-top: 1.5rem;
   }
 }
 
