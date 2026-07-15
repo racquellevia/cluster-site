@@ -101,7 +101,17 @@ function placeLockup() {
   lockup.style.transform = `translate(${(PAD - flow.left) * e}px, ${(PAD - y0) * e}px) scale(${k})`;
   setHeader(kEnd, e);
 }
-addEventListener("scroll", placeLockup, { passive: true });
+
+// Update the lockup once per render frame (not on scroll events) so its CSS
+// transform and the WebGL mark blob that tracks it are computed from the same
+// scrollY in the same frame — the scroll-event/rAF desync is what made the mark
+// wiggle while docking. Skip frames where scrollY didn't move.
+let lastScrollY = -1;
+cloud.setPreFrame(() => {
+  if (scrollY === lastScrollY) return;
+  lastScrollY = scrollY;
+  placeLockup();
+});
 
 function layoutHero() {
   fitLede();
