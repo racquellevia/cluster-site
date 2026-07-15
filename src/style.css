@@ -119,6 +119,14 @@ main {
   will-change: transform;
 }
 
+/* once fully shrunk, the browser pins it — no per-frame JS transform to wiggle
+   (see main.js); the docked transform is scroll-independent */
+.lockup.docked {
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
 h1 {
   /* wordmark scale: deliberately above body-heading norms, it IS the hero */
   font-size: clamp(3.5rem, 13vw, 9rem);
