@@ -39,8 +39,8 @@ function inlineEverything() {
 
       // Inline the favicon too — it's a plain public/ file Vite copies into
       // dist/, but the cleanup below deletes everything except index.html.
-      const faviconUri = await dataUri(resolve("public/favicon.svg"));
-      html = html.replace('href="./favicon.svg"', `href="${faviconUri}"`);
+      const faviconUri = await dataUri(resolve("public/favicon.png"));
+      html = html.replace('href="./favicon.png"', `href="${faviconUri}"`);
 
       // Inline the CSS chunk, with its @font-face url()s swapped for data URIs.
       const files = await readdir(dir);
