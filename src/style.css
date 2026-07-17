@@ -280,6 +280,18 @@ p {
   margin-top: 0;
 }
 
+.details-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.details-ctas .register {
+  margin-top: 0;
+}
+
 .register {
   display: inline-block;
   margin-top: 2rem;
