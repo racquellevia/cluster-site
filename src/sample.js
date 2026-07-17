@@ -123,8 +123,11 @@ const PROCEDURAL = {
 
 // Samples n points from an image's "ink" (dark or opaque-on-transparent pixels).
 async function fromImage(src, n) {
+  // In the single-file build, images are inlined as data URIs under this map;
+  // in dev it's undefined and we fetch the URL as usual.
+  const resolved = (typeof window !== "undefined" && window.__ASSETS__?.[src]) || src;
   const img = new Image();
-  img.src = src;
+  img.src = resolved;
   await img.decode();
 
   const MAX = 256;

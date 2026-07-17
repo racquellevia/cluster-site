@@ -52,29 +52,66 @@ const headerBg = document.querySelector("#header-bg");
 const hero = document.querySelector("#hero");
 const PAD = 20; // header inset, px
 let flow = { left: 0, top: 0, width: 1, height: 1 }; // lockup's untransformed document rect
+let docked = false; // true once shrunk into the fixed header (see .lockup.docked)
+
+const endScale = () => Math.min(200, innerWidth * 0.45) / flow.width;
 
 function measureLockup() {
+  lockup.classList.remove("docked"); // restore normal flow so we measure the true rect
+  docked = false;
   lockup.style.transform = "none";
   const r = lockup.getBoundingClientRect();
   flow = { left: r.left + scrollX, top: r.top + scrollY, width: r.width, height: r.height };
   placeLockup();
 }
 
-function placeLockup() {
-  const p = Math.min(1, Math.max(0, scrollY / (hero.offsetHeight * 0.55)));
-  const e = p * p * (3 - 2 * p); // smoothstep
-  const kEnd = Math.min(200, innerWidth * 0.45) / flow.width;
-  const k = 1 + e * (kEnd - 1);
-  const y0 = flow.top - scrollY; // where the lockup would sit if left in flow
-  lockup.style.transform = `translate(${(PAD - flow.left) * e}px, ${(PAD - y0) * e}px) scale(${k})`;
+function setHeader(kEnd, e) {
   const headerH = flow.height * kEnd + PAD * 1.4; // PAD above, ~0.4·PAD below
   headerBg.style.height = `${headerH}px`;
   headerBg.style.opacity = e;
-  // .lockup is transform-positioned, not position:fixed, so it reserves no
-  // layout space itself — sections read this to clear the docked header
+  // sections read this to clear the docked header
   document.documentElement.style.setProperty("--header-h", `${headerH}px`);
 }
-addEventListener("scroll", placeLockup, { passive: true });
+
+// Once fully shrunk, hand pinning to the browser: position:fixed + a
+// scroll-independent transform. Recomputing the transform every scroll frame
+// (needed only while the lockup is still in flow) is what made it wiggle.
+function dock() {
+  docked = true;
+  const kEnd = endScale();
+  lockup.classList.add("docked");
+  lockup.style.transform = `translate(${PAD}px, ${PAD}px) scale(${kEnd})`;
+  setHeader(kEnd, 1);
+}
+
+function placeLockup() {
+  const p = Math.min(1, Math.max(0, scrollY / (hero.offsetHeight * 0.55)));
+  if (p >= 1) {
+    if (!docked) dock();
+    return; // docked: fixed position + constant transform, nothing to update
+  }
+  if (docked) {
+    docked = false;
+    lockup.classList.remove("docked");
+  }
+  const e = p * p * (3 - 2 * p); // smoothstep
+  const kEnd = endScale();
+  const k = 1 + e * (kEnd - 1);
+  const y0 = flow.top - scrollY; // where the lockup would sit if left in flow
+  lockup.style.transform = `translate(${(PAD - flow.left) * e}px, ${(PAD - y0) * e}px) scale(${k})`;
+  setHeader(kEnd, e);
+}
+
+// Update the lockup once per render frame (not on scroll events) so its CSS
+// transform and the WebGL mark blob that tracks it are computed from the same
+// scrollY in the same frame — the scroll-event/rAF desync is what made the mark
+// wiggle while docking. Skip frames where scrollY didn't move.
+let lastScrollY = -1;
+cloud.setPreFrame(() => {
+  if (scrollY === lastScrollY) return;
+  lastScrollY = scrollY;
+  placeLockup();
+});
 
 function layoutHero() {
   fitLede();
