@@ -268,7 +268,6 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
       // so density matches the docked header state); fades out as the
       // lockup docks into the header (same curve as main.js placeLockup)
       const hero = 1 - smoothstep(Math.min(1, Math.max(0, scrollY / (anchors[1] * 0.55))));
-      if (window.__DBG && window.__DBG-- > 0) console.log("DBG blob", JSON.stringify({ scrollY, hero, anchors1: anchors[1], rH: r.height, rTop: r.top, rLeft: r.left, visW, visH, M, offH: markEl.offsetHeight }));
       const mx = ((r.left + r.width / 2) / innerWidth - 0.5) * visW;
       // sampled logo-blob image spans ~0.95 unit-box units
       const ms = (((r.height / innerHeight) * visH) / 0.95) * (1 + hero * 0.12);
