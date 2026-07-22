@@ -273,6 +273,13 @@ p {
   margin-inline: auto;
 }
 
+.vis-logo {
+  display: block;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 1.5rem auto 0;
+}
+
 .scroll-hint {
   position: absolute;
   bottom: 1.5rem;
