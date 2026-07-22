@@ -8,12 +8,24 @@ import {
   Points,
   CanvasTexture,
   SRGBColorSpace,
+  Vector3,
   Clock,
 } from "three";
 
 const TAU = Math.PI * 2;
 const FOV = 40;
 const CAM_DIST = 10;
+
+// dot color drifts between pink and orange, pushed away from the mid-grey
+// they average to so 85%-opacity blending against the white background
+// doesn't read as washed out
+function saturate([r, g, b], amt) {
+  const grey = (r + g + b) / 3;
+  return [r, g, b].map((c) => Math.min(1, Math.max(0, grey + (c - grey) * amt)));
+}
+const PINK = saturate([0xbc / 255, 0x4a / 255, 0x72 / 255], 1.6);
+const ORANGE = saturate([0xde / 255, 0x68 / 255, 0x26 / 255], 1.6);
+const rgba = ([r, g, b], a) => `rgba(${r * 255 | 0},${g * 255 | 0},${b * 255 | 0},${a})`;
 
 function dotTexture() {
   const c = document.createElement("canvas");
@@ -29,6 +41,65 @@ function dotTexture() {
 }
 
 const smoothstep = (t) => t * t * (3 - 2 * t);
+
+const HULL_ANGLES = 90; // vertices in each shape's glow outline (4° resolution)
+// glow fade steepness: 1 at rest (t=0 or 1), 0 mid-transition (t=0.5), raised
+// to a power so it only appears once the dots have essentially finished
+// settling into shape, instead of arriving alongside (or ahead of) them
+const SETTLE_POWER = 10;
+
+function fillGaps(out, r, numAngles, filled) {
+  for (let k = 0; k < numAngles; k++) {
+    if (filled(r[k])) continue;
+    for (let d = 1; d < numAngles; d++) {
+      const lo = (k - d + numAngles) % numAngles;
+      if (filled(r[lo])) { out[k * 3] = out[lo * 3]; out[k * 3 + 1] = out[lo * 3 + 1]; break; }
+      const hi = (k + d) % numAngles;
+      if (filled(r[hi])) { out[k * 3] = out[hi * 3]; out[k * 3 + 1] = out[hi * 3 + 1]; break; }
+    }
+  }
+}
+
+// silhouette outline of a shape's own points (unit-box coords, same array
+// format as targets[]): bucket points by angle from centroid and keep the
+// farthest one per bucket (and the nearest, to trace an inner hole if the
+// shape has one — e.g. the donut/torus). Every shape's outline gets the
+// same vertex count in the same angular order, so any two can be blended
+// vertex-for-vertex — and since the points backing image sections (star.png,
+// chevrons.png, ...) are themselves sampled from that image's dark pixels
+// (see sample.js), this traces the actual artwork, concave notches and
+// holes included, not just a convex approximation.
+function polarHull(pts, numAngles) {
+  const n = pts.length / 3;
+  let cx = 0, cy = 0;
+  for (let p = 0; p < n; p++) { cx += pts[p * 3]; cy += pts[p * 3 + 1]; }
+  cx /= n; cy /= n;
+  const outer = new Float32Array(numAngles * 3);
+  const inner = new Float32Array(numAngles * 3);
+  const maxR = new Float32Array(numAngles).fill(-1);
+  const minR = new Float32Array(numAngles).fill(-1);
+  for (let p = 0; p < n; p++) {
+    const x = pts[p * 3], y = pts[p * 3 + 1];
+    const dx = x - cx, dy = y - cy;
+    let a = Math.atan2(dy, dx);
+    if (a < 0) a += TAU;
+    const k = Math.min(numAngles - 1, (a / TAU) * numAngles | 0);
+    const r = dx * dx + dy * dy;
+    if (r > maxR[k]) { maxR[k] = r; outer[k * 3] = x; outer[k * 3 + 1] = y; }
+    if (minR[k] < 0 || r < minR[k]) { minR[k] = r; inner[k * 3] = x; inner[k * 3 + 1] = y; }
+  }
+  // buckets with no point (gaps in a sparse/thin shape) fall back to their
+  // nearest filled neighbor
+  fillGaps(outer, maxR, numAngles, (r) => r >= 0);
+  fillGaps(inner, minR, numAngles, (r) => r >= 0);
+  // a hole exists if the nearest ink in most directions is still a good
+  // distance out from center (a ring), rather than close to it (a disk)
+  let holeVotes = 0;
+  for (let k = 0; k < numAngles; k++) {
+    if (maxR[k] > 0 && minR[k] / maxR[k] > 0.25) holeVotes++;
+  }
+  return { outer, inner: holeVotes > numAngles * 0.6 ? inner : null };
+}
 
 // Two THREE.Points clouds behind the page: a small blob pinned to the hero
 // lockup's anchor (which shrinks into the fixed header), and a morphing cloud
@@ -65,13 +136,50 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     color: 0x141414,
     map: tex,
     transparent: true,
-    opacity: 0.85,
+    opacity: 1,
     alphaTest: 0.4,
     depthWrite: false,
+    depthTest: false,
     sizeAttenuation: true,
   });
   const points = new Points(geometry, material);
+  // positions are rewritten every frame (scroll-driven morph/mark tracking);
+  // three's frustum culling caches a boundingSphere computed once, lazily,
+  // from whatever positions exist on the first render, then never
+  // recomputes it — so a moving cloud can drift outside that stale sphere
+  // and get silently culled (seen concretely: the mark blob vanishing after
+  // a live window resize shifts its anchor's world position). Disable
+  // culling instead of chasing computeBoundingSphere() every frame.
+  points.frustumCulled = false;
   scene.add(points);
+
+  // camera never moves after this — project() below needs matrixWorldInverse,
+  // which only recomputes on updateMatrixWorld()
+  camera.updateMatrixWorld();
+
+  // pink/orange solid shapes behind the cloud, outlining its current
+  // silhouette; sit in their own layer (z-index between #cloud and the page
+  // background, see style.css) so the black dots draw on top of them.
+  // Two representations, chosen per-section by whether it has a source
+  // image (see setGlowImage/setGlowShape below): a masked div showing the
+  // actual asset for sections that have one, an SVG path hull-traced from
+  // the point cloud for the (procedural-only) sections that don't.
+  const glowSvg = document.querySelector("#shape-glow");
+  const pinkPoly = document.querySelector("#glow-pink");
+  const orangePoly = document.querySelector("#glow-orange");
+  const pinkImg = document.querySelector("#glow-pink-img");
+  const orangeImg = document.querySelector("#glow-orange-img");
+  // same pink/orange pair, but a plain circle behind the persistent logo
+  // blob (see the markEl block below) instead of a per-section shape
+  const pinkMark = document.querySelector("#glow-pink-mark");
+  const orangeMark = document.querySelector("#glow-orange-mark");
+  if (pinkPoly) pinkPoly.setAttribute("fill", rgba(PINK, 0.15));
+  if (orangePoly) orangePoly.setAttribute("fill", rgba(ORANGE, 0.15));
+  if (pinkImg) pinkImg.style.backgroundColor = rgba(PINK, 0.15);
+  if (orangeImg) orangeImg.style.backgroundColor = rgba(ORANGE, 0.15);
+  if (pinkMark) pinkMark.style.backgroundColor = rgba(PINK, 0.15);
+  if (orangeMark) orangeMark.style.backgroundColor = rgba(ORANGE, 0.15);
+  const projected = new Vector3();
 
   // second, small cloud: the mark blob pinned to the #cloud-anchor box in the
   // hero lockup — it rides along as the lockup shrinks into the fixed header
@@ -90,9 +198,15 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     depthWrite: false,
     sizeAttenuation: true,
   });
-  markScene.add(new Points(markGeometry, markMaterial));
+  const markPoints = new Points(markGeometry, markMaterial);
+  markPoints.frustumCulled = false; // see the `points.frustumCulled` comment above
+  markScene.add(markPoints);
 
   const targets = sectionEls.map(() => initial);
+  const hulls = targets.map((pts) => polarHull(pts, HULL_ANGLES));
+  // per-section glow asset, when one exists (see setGlowImage): the source
+  // image url plus its unit-box bounding box, used to size/place the mask
+  const glowImages = sectionEls.map(() => null);
   const phase = Float32Array.from({ length: N }, () => Math.random() * TAU);
 
   const markEl = document.querySelector("#cloud-anchor");
@@ -147,6 +261,7 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     const h = innerHeight;
     renderer.setSize(w, h);
     markRenderer.setSize(w, h);
+    if (glowSvg) glowSvg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     visH = 2 * Math.tan((FOV * Math.PI) / 360) * CAM_DIST;
@@ -167,6 +282,7 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
       return (cx / w - 0.5) * visW * depthFactor;
     });
     targets[0] = offscreenRing();
+    hulls[0] = polarHull(targets[0], HULL_ANGLES);
   }
   resize();
   addEventListener("resize", resize);
@@ -259,6 +375,107 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
     }
     geometry.attributes.position.needsUpdate = true;
 
+    // outline the cloud's current shape and fill it with the pink/orange
+    // glow shapes, each nudged a bit off-center so they read as two
+    // overlapping layers instead of sitting perfectly stacked — same
+    // vertical orientation as the point cloud, just shifted apart. Unlike
+    // the dots, these don't morph between shapes: they show whichever shape
+    // is nearest and fade out while scrolling between shapes (t away from
+    // 0 or 1), back in once the cloud settles into the next one.
+    if (pinkPoly || orangePoly || pinkImg || orangeImg) {
+      const nearest = t < 0.5 ? i : j;
+      const [nx, ny, nsx, nsy, , nz] = transform(nearest);
+      const wobbleX = reduceMotion ? 0 : Math.sin(time * 0.15) * 6;
+      const wobbleY = reduceMotion ? 0 : Math.cos(time * 0.13) * 6;
+      const img = glowImages[nearest];
+
+      if (img) {
+        // real shape asset: mask a colored div to its exact silhouette,
+        // sized/positioned to its projected on-screen bounding box
+        if (pinkPoly) pinkPoly.setAttribute("d", "");
+        if (orangePoly) orangePoly.setAttribute("d", "");
+        const corners = [
+          [img.minX, img.minY], [img.maxX, img.minY],
+          [img.minX, img.maxY], [img.maxX, img.maxY],
+        ];
+        let minPx = Infinity, maxPx = -Infinity, minPy = Infinity, maxPy = -Infinity, onScreen = 0;
+        for (const [ux, uy] of corners) {
+          projected.set(ux * nsx + nx, uy * nsy + ny, nz).project(camera);
+          const x = (projected.x * 0.5 + 0.5) * innerWidth;
+          const y = (1 - (projected.y * 0.5 + 0.5)) * innerHeight;
+          if (x >= 0 && x <= innerWidth && y >= 0 && y <= innerHeight) onScreen++;
+          if (x < minPx) minPx = x;
+          if (x > maxPx) maxPx = x;
+          if (y < minPy) minPy = y;
+          if (y > maxPy) maxPy = y;
+        }
+        const settled = onScreen === 0 ? 0 : Math.abs(2 * t - 1) ** SETTLE_POWER;
+        // per-asset size fudge (see data-glow-scale in index.html): the glow
+        // svgs' own bounding boxes don't always match their dot-cloud raster's
+        // proportions, so scale around the same center rather than the corner
+        const scale = img.scale || 1;
+        const offsetY = img.offsetY || 0;
+        const cx = (minPx + maxPx) / 2 + (img.offsetX || 0), cy = (minPy + maxPy) / 2 + offsetY;
+        const w = (maxPx - minPx) * scale, h = (maxPy - minPy) * scale;
+        if (pinkImg) {
+          pinkImg.style.maskImage = pinkImg.style.webkitMaskImage = `url(${img.url})`;
+          pinkImg.style.left = `${cx - w / 2 - 14 - wobbleX}px`;
+          pinkImg.style.top = `${cy - h / 2 - 3 + (img.pinkOffsetY || 0) - wobbleY}px`;
+          pinkImg.style.width = `${w}px`;
+          pinkImg.style.height = `${h}px`;
+          pinkImg.style.opacity = settled;
+        }
+        if (orangeImg) {
+          orangeImg.style.maskImage = orangeImg.style.webkitMaskImage = `url(${img.url})`;
+          orangeImg.style.left = `${cx - w / 2 + 14 + (img.orangeOffsetX || 0) + wobbleX}px`;
+          orangeImg.style.top = `${cy - h / 2 + 8 + wobbleY}px`;
+          orangeImg.style.width = `${w}px`;
+          orangeImg.style.height = `${h}px`;
+          orangeImg.style.opacity = settled;
+        }
+      } else {
+        // no source asset (procedural-only shape): fall back to a hull
+        // traced from the point cloud's own dots
+        if (pinkImg) pinkImg.style.opacity = 0;
+        if (orangeImg) orangeImg.style.opacity = 0;
+        const hull = hulls[nearest];
+        const projectRing = (ring) => {
+          const pts = [];
+          let onScreen = 0;
+          for (let q = 0; q < HULL_ANGLES; q++) {
+            const o = q * 3;
+            const hx = ring[o] * nsx + nx;
+            const hy = ring[o + 1] * nsy + ny;
+            const hz = ring[o + 2] * nsx + nz;
+            projected.set(hx, hy, hz).project(camera);
+            const x = (projected.x * 0.5 + 0.5) * innerWidth;
+            const y = (1 - (projected.y * 0.5 + 0.5)) * innerHeight;
+            if (x >= 0 && x <= innerWidth && y >= 0 && y <= innerHeight) onScreen++;
+            pts.push([x, y]);
+          }
+          return { pts, onScreen };
+        };
+        // shapes with a hole (e.g. the procedural torus) get a second,
+        // inner ring — fill-rule="evenodd" on the <path> cuts it out
+        const outerRing = projectRing(hull.outer);
+        const innerRing = hull.inner && projectRing(hull.inner);
+        // also hides while mostly off-screen (e.g. the hero's offscreen ring)
+        const settled = outerRing.onScreen < HULL_ANGLES * 0.3 ? 0 : Math.abs(2 * t - 1) ** SETTLE_POWER;
+        const ringPath = (pts, dx, dy) =>
+          "M" + pts.map(([x, y]) => `${(x + dx).toFixed(1)},${(y + dy).toFixed(1)}`).join("L") + "Z";
+        const toPath = (dx, dy) =>
+          ringPath(outerRing.pts, dx, dy) + (innerRing ? " " + ringPath(innerRing.pts, dx, dy) : "");
+        if (pinkPoly) {
+          pinkPoly.setAttribute("d", toPath(-14 - wobbleX, -3 - wobbleY));
+          pinkPoly.style.opacity = settled;
+        }
+        if (orangePoly) {
+          orangePoly.setAttribute("d", toPath(14 + wobbleX, 8 + wobbleY));
+          orangePoly.style.opacity = settled;
+        }
+      }
+    }
+
     // mark blob tracks the anchor box live (the lockup moves under scroll);
     // dots are proportionally bigger + fully opaque so the mark reads solid
     if (markEl) {
@@ -303,6 +520,34 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
         markDrawn[o + 2] = markSrc[o + 2] * ms + Math.sin(time * 0.4 + ph * 2.3) * mAmp;
       }
       markGeometry.attributes.position.needsUpdate = true;
+
+      // circle glow behind the blob: same 0.15-opacity pink/orange pair and
+      // offset/wobble as the per-section shapes, just always-on (no settle
+      // fade) since the mark itself never fades in/out, only docks smaller.
+      // Offset/wobble scale with the anchor's own size (fractions tuned to
+      // match the old fixed ±14/±8px look at hero scale, r.width ~104px)
+      // instead of fixed px, so they stay aligned behind the dots as the
+      // anchor shrinks into the header instead of drifting off to the sides.
+      if (pinkMark || orangeMark) {
+        const wobbleX = reduceMotion ? 0 : Math.sin(time * 0.15) * r.width * 0.058;
+        const wobbleY = reduceMotion ? 0 : Math.cos(time * 0.13) * r.width * 0.058;
+        const cScale = 0.84;
+        const cw = r.width * cScale, ch = r.height * cScale;
+        const ccx = r.left + r.width / 2, ccy = r.top + r.height / 2;
+        const offX = r.width * 0.135;
+        if (pinkMark) {
+          pinkMark.style.left = `${ccx - cw / 2 - offX - wobbleX}px`;
+          pinkMark.style.top = `${ccy - ch / 2 - r.height * 0.029 - wobbleY}px`;
+          pinkMark.style.width = `${cw}px`;
+          pinkMark.style.height = `${ch}px`;
+        }
+        if (orangeMark) {
+          orangeMark.style.left = `${ccx - cw / 2 + offX + wobbleX}px`;
+          orangeMark.style.top = `${ccy - ch / 2 + r.height * 0.077 + wobbleY}px`;
+          orangeMark.style.width = `${cw}px`;
+          orangeMark.style.height = `${ch}px`;
+        }
+      }
     }
 
     if (!reduceMotion) points.rotation.y = Math.sin(time * 0.12) * 0.1;
@@ -320,6 +565,14 @@ export function startCloud(canvas, sectionEls, N, initial, markPts) {
   return {
     setTarget(index, pts) {
       targets[index] = pts;
+      hulls[index] = polarHull(pts, HULL_ANGLES);
+    },
+    // registers a section's real shape image/svg as its glow layer (drawn
+    // via CSS mask, see the frame loop) instead of the point-cloud hull —
+    // img: { url, minX, maxX, minY, maxY } in unit-box coords, or null to
+    // fall back to the hull traced from this section's dots
+    setGlowImage(index, img) {
+      glowImages[index] = img;
     },
     setPreFrame(fn) {
       preFrame = fn;

@@ -36,6 +36,46 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* pink/orange glow shapes, behind #cloud so its transparent canvas areas
+   show them through while the black dots draw over them (see cloud.js) */
+#shape-glow {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* glow shape masked from the section's actual source image (see cloud.js);
+   position/size/mask-image are all set per-frame in JS, this just establishes
+   the layer and mask behavior */
+.glow-mask {
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+/* circle glow behind the logo blob (see cloud.js). Ties with #mark-cloud (2)
+   rather than sitting at main's level (1): main's header-bg wash (z-index 5,
+   but scoped to main's own stacking context since main creates one) would
+   otherwise paint over a z-index:1 circle once docked, diluting it almost to
+   nothing. At equal z-index, DOM order wins — this appears before #mark-cloud
+   in index.html, so the dots still draw on top. */
+.glow-circle {
+  position: fixed;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
 #cloud {
   position: fixed;
   inset: 0;
@@ -303,6 +343,7 @@ p {
   border: 1px solid #111;
   border-radius: 999px;
   text-decoration: none;
+  text-shadow: none; /* override .copy > *'s inherited white halo */
   transition:
     background-color 0.2s ease,
     color 0.2s ease;

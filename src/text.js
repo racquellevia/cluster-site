@@ -6,9 +6,12 @@ export function initTextAnimations() {
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   document.querySelectorAll(".panel .copy").forEach((copy) => {
-    // animate the lockup's children, not the lockup itself — main.js owns
-    // its transform for the scroll-driven header shrink
-    const lines = copy.querySelectorAll(":scope > :not(.lockup), .lockup > *");
+    // exclude the lockup's children (the "Cluster" wordmark + lede): they
+    // double as the docked header (see main.js), which must be visible
+    // immediately on any scroll position, including a reload that lands
+    // mid-page — an onScroll-triggered fade would never fire since the hero
+    // never scrolls back into view in that case, leaving the header blank
+    const lines = copy.querySelectorAll(":scope > :not(.lockup)");
     utils.set(lines, { opacity: 0 });
     animate(lines, {
       opacity: [0, 1],

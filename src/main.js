@@ -1,5 +1,5 @@
 import "./style.css";
-import { shapePoints } from "./sample.js";
+import { shapePoints, glowAsset } from "./sample.js";
 import { startCloud } from "./cloud.js";
 import { initTextAnimations } from "./text.js";
 
@@ -33,6 +33,22 @@ sections.forEach((el, i) => {
     cloud.setTarget(i, pts);
     if (i === expectIndex) updateCtaOffset();
   });
+  // glow shape behind the cloud: the section's actual shape image/svg,
+  // masked and recolored (see cloud.js), rather than a hull traced from the
+  // point cloud's randomly-sampled dots. data-glow-src overrides
+  // data-shape-src for sections (e.g. the procedural torus/spiral) that
+  // want a different glow shape than their dots.
+  const glowSrc = el.dataset.glowSrc || el.dataset.shapeSrc;
+  if (glowSrc) {
+    const scale = parseFloat(el.dataset.glowScale) || 1;
+    const offsetX = parseFloat(el.dataset.glowOffsetX) || 0;
+    const offsetY = parseFloat(el.dataset.glowOffsetY) || 0;
+    const pinkOffsetY = parseFloat(el.dataset.glowOffsetYPink) || 0;
+    const orangeOffsetX = parseFloat(el.dataset.glowOffsetXOrange) || 0;
+    glowAsset(glowSrc).then((img) =>
+      cloud.setGlowImage(i, { ...img, scale, offsetX, offsetY, pinkOffsetY, orangeOffsetX }),
+    );
+  }
 });
 
 initTextAnimations();

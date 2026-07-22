@@ -121,11 +121,16 @@ const PROCEDURAL = {
     }),
 };
 
-// Samples n points from an image's "ink" (dark or opaque-on-transparent pixels).
-async function fromImage(src, n) {
-  // In the single-file build, images are inlined as data URIs under this map;
-  // in dev it's undefined and we fetch the URL as usual.
-  const resolved = (typeof window !== "undefined" && window.__ASSETS__?.[src]) || src;
+// In the single-file build, images are inlined as data URIs under this map;
+// in dev it's undefined and we fetch the URL as usual.
+function resolveAssetUrl(src) {
+  return (typeof window !== "undefined" && window.__ASSETS__?.[src]) || src;
+}
+
+// Loads an image and returns its "ink" (dark or opaque-on-transparent)
+// pixel indices plus the sampled canvas size.
+async function loadInk(src) {
+  const resolved = resolveAssetUrl(src);
   const img = new Image();
   img.src = resolved;
   await img.decode();
@@ -138,7 +143,6 @@ async function fromImage(src, n) {
   ctx.drawImage(img, 0, 0, w, h);
   const { data } = ctx.getImageData(0, 0, w, h);
 
-  // Collect ink pixels: opaque enough and dark enough.
   const ink = [];
   for (let i = 0; i < w * h; i++) {
     const a = data[i * 4 + 3];
@@ -146,15 +150,47 @@ async function fromImage(src, n) {
     if (a > 96 && lum < 160) ink.push(i);
   }
   if (ink.length < 8) throw new Error(`no dark pixels found in ${src}`);
+  return { ink, w, h };
+}
 
+// Samples n points from an image's ink pixels, jittered within each pixel
+// so points don't land on a visible grid.
+async function fromImage(src, n) {
+  const { ink, w, h } = await loadInk(src);
   const unit = 1 / Math.max(w, h);
   return positions(n, (p, o) => {
     const px = ink[(Math.random() * ink.length) | 0];
-    // jitter within the pixel so points don't land on a visible grid
     p[o] = ((px % w) + Math.random() - w / 2) * unit;
     p[o + 1] = -((Math.floor(px / w)) + Math.random() - h / 2) * unit;
     p[o + 2] = (Math.random() - 0.5) * Z_DEPTH;
   });
+}
+
+// A section's glow shape asset (see cloud.js): an alpha-mask silhouette of
+// the image's ink pixels — white ink, fully transparent elsewhere — so it
+// works as a CSS mask-image regardless of whether the source asset itself
+// has any transparency (most of ours are dark ink on opaque white). Also
+// returns the ink's unit-box bounding box, for sizing/positioning the div
+// this masks — same coordinate space fromImage() samples the dots into.
+export async function glowAsset(src) {
+  const { ink, w, h } = await loadInk(src);
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext("2d");
+  const out = ctx.createImageData(w, h);
+  const unit = 1 / Math.max(w, h);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const px of ink) {
+    out.data[px * 4] = out.data[px * 4 + 1] = out.data[px * 4 + 2] = out.data[px * 4 + 3] = 255;
+    const x = (px % w) * unit - (w / 2) * unit;
+    const y = -(Math.floor(px / w) * unit - (h / 2) * unit);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  ctx.putImageData(out, 0, 0);
+  const blob = await canvas.convertToBlob();
+  return { url: URL.createObjectURL(blob), minX, maxX, minY, maxY };
 }
 
 // spec: { src?: string, fallback: string }
